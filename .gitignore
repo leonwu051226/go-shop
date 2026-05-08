@@ -1,0 +1,43 @@
+
+node_modules/
+# 打包构建后的产物
+dist/
+dist-ssr/
+build/
+# 本地日志文件
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+
+# 编译后的二进制执行文件（绝不能传，体积大且毫无意义）
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+# 测试生成的覆盖率文件
+*.test
+*.out
+*.prof
+# 依赖包缓存
+vendor/
+
+
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+
+# JetBrains 家族 (GoLand, WebStorm 等)
+.idea/
+*.iml
+# VS Code
+.vscode/
+*.code-workspace
+# 目录同步文件
+.DS_Store
+Thumbs.db

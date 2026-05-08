@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+@theme {
+  --color-taobao-red: #FF5000;
+  --color-taobao-orange: #FF9000;
+  --color-taobao-bg: #F4F4F4;
+}
+
+body {
+  background-color: #F4F4F4;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
