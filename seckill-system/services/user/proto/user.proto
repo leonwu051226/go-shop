@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package user;
+
+option go_package = "seckill-system/services/user/proto/gen";
+
+// 用户服务
+service UserService {
+  // 用户注册
+  rpc Register (RegisterRequest) returns (RegisterResponse);
+  // 用户登录
+  rpc Login (LoginRequest) returns (LoginResponse);
+  // 解析并验证 Token（供其他服务中间件调用）
+  rpc ParseToken (ParseTokenRequest) returns (ParseTokenResponse);
+  // 根据 ID 查询用户信息
+  rpc GetUserByID (GetUserByIDRequest) returns (GetUserByIDResponse);
+}
+
+// 通用用户信息
+message UserInfo {
+  uint64 id = 1;
+  string username = 2;
+  string created_at = 3;
+}
+
+// ========== Register ==========
+message RegisterRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message RegisterResponse {
+  int32 code = 1;
+  string message = 2;
+  UserInfo data = 3;
+}
+
+// ========== Login ==========
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  int32 code = 1;
+  string message = 2;
+  string token = 3;
+}
+
+// ========== ParseToken ==========
+message ParseTokenRequest {
+  string token = 1;
+}
+
+message ParseTokenResponse {
+  int32 code = 1;
+  string message = 2;
+  uint64 user_id = 3;
+  string username = 4;
+}
+
+// ========== GetUserByID ==========
+message GetUserByIDRequest {
+  uint64 id = 1;
+}
+
+message GetUserByIDResponse {
+  int32 code = 1;
+  string message = 2;
+  UserInfo data = 3;
+}

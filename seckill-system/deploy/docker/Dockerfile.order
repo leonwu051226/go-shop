@@ -1,0 +1,29 @@
+# Order Service Dockerfile
+# Multi-stage build for minimal final image
+
+FROM golang:1.26-alpine AS builder
+
+WORKDIR /build
+
+# 1. 下载依赖（利用缓存层）
+COPY go.mod go.sum ./
+RUN go mod download
+
+# 2. 复制完整源码并编译
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o order ./services/order/cmd/order/
+
+# 3. 最终阶段：极简镜像
+FROM alpine:latest
+WORKDIR /app
+
+# 安装基础 CA 证书
+RUN apk --no-cache add ca-certificates
+
+COPY --from=builder /build/order /app/order
+
+# Order 服务仅消费 RabbitMQ，不暴露 HTTP 端口
+# 如需未来扩展可取消下行注释：
+# EXPOSE 8083
+
+ENTRYPOINT ["/app/order"]

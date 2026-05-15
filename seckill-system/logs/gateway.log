@@ -1,0 +1,21 @@
+2026/05/12 22:46:35 RabbitMQ connected successfully
+[GIN-debug] [WARNING] Creating an Engine instance with the Logger and Recovery middleware already attached.
+
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /ping                     --> seckill-system/services/gateway/internal/api.Ping (4 handlers)
+[GIN-debug] GET    /api/v1/seckill/products  --> seckill-system/services/gateway/internal/api.(*SeckillAPI).GetSeckillProducts-fm (4 handlers)
+[GIN-debug] POST   /api/v1/seckill/do        --> seckill-system/services/gateway/internal/api.(*SeckillAPI).DoSeckill-fm (5 handlers)
+2026/05/12 22:46:35 Gateway server starting on :8080
+[GIN-debug] [WARNING] You trusted all proxies, this is NOT safe. We recommend you to set a value.
+Please check https://github.com/gin-gonic/gin/blob/master/docs/doc.md#dont-trust-all-proxies for details.
+[GIN-debug] Listening and serving HTTP on :8080
+[GIN] 2026/05/12 - 23:35:02 | 204 |       0s |     172.17.64.1 | OPTIONS  "/api/v1/login"
+[GIN] 2026/05/12 - 23:35:02 | 404 |       0s |     172.17.64.1 | POST     "/api/v1/login"
+[GIN] 2026/05/12 - 23:35:02 | 404 |       0s |     172.17.64.1 | POST     "/api/v1/login"
+[GIN] 2026/05/12 - 23:35:03 | 404 |       0s |     172.17.64.1 | POST     "/api/v1/login"
+[GIN] 2026/05/12 - 23:35:03 | 404 |       0s |     172.17.64.1 | POST     "/api/v1/login"
+[GIN] 2026/05/13 - 10:41:12 | 204 |       0s |     172.17.64.1 | OPTIONS  "/api/v1/login"
+[GIN] 2026/05/13 - 10:41:12 | 404 |       0s |     172.17.64.1 | POST     "/api/v1/login"

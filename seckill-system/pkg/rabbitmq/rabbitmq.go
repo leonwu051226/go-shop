@@ -5,33 +5,36 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
-	"seckill-system/pkg/config"
+	"seckill-system/pkg/common/config"
 )
 
 const (
-	OrderQueueName = "seckill.order.queue"
-	OrderExchange  = "seckill.order.exchange"
+	OrderQueueName  = "seckill.order.queue"
+	OrderExchange   = "seckill.order.exchange"
 	OrderRoutingKey = "seckill.order"
 )
 
 type Client struct {
-	conn    *amqp.Connection
-	channel *amqp.Channel
+	conn     *amqp.Connection
+	channel  *amqp.Channel
+	confirms <-chan amqp.Confirmation
+	mu       sync.Mutex
 }
 
 var MQ *Client
 
 type OrderMessage struct {
-	OrderID            string `json:"order_id"`
-	UserID             uint   `json:"user_id"`
-	ProductID          uint   `json:"product_id"`
-	SeckillProductID   uint   `json:"seckill_product_id"`
-	Quantity           int    `json:"quantity"`
-	TotalPrice         float64 `json:"total_price"`
-	CreatedAt          string `json:"created_at"`
+	OrderID          string  `json:"order_id"`
+	UserID           uint    `json:"user_id"`
+	ProductID        uint    `json:"product_id"`
+	SeckillProductID uint    `json:"seckill_product_id"`
+	Quantity         int     `json:"quantity"`
+	TotalPrice       float64 `json:"total_price"`
+	CreatedAt        string  `json:"created_at"`
 }
 
 func InitRabbitMQ(cfg config.RabbitMQConfig) error {
@@ -94,9 +97,16 @@ func InitRabbitMQ(cfg config.RabbitMQConfig) error {
 		return fmt.Errorf("failed to bind queue: %w", err)
 	}
 
+	if err := ch.Confirm(false); err != nil {
+		ch.Close()
+		conn.Close()
+		return fmt.Errorf("failed to enable publisher confirms: %w", err)
+	}
+
 	MQ = &Client{
-		conn:    conn,
-		channel: ch,
+		conn:     conn,
+		channel:  ch,
+		confirms: ch.NotifyPublish(make(chan amqp.Confirmation, 1)),
 	}
 
 	log.Println("RabbitMQ connected successfully")
@@ -112,7 +122,10 @@ func (c *Client) PublishOrderMessage(msg *OrderMessage) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	return c.channel.PublishWithContext(
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if err := c.channel.PublishWithContext(
 		ctx,
 		OrderExchange,
 		OrderRoutingKey,
@@ -121,9 +134,23 @@ func (c *Client) PublishOrderMessage(msg *OrderMessage) error {
 		amqp.Publishing{
 			ContentType:  "application/json",
 			DeliveryMode: amqp.Persistent,
+			MessageId:    msg.OrderID,
+			Timestamp:    time.Now(),
 			Body:         body,
 		},
-	)
+	); err != nil {
+		return err
+	}
+
+	select {
+	case confirm := <-c.confirms:
+		if !confirm.Ack {
+			return fmt.Errorf("rabbitmq publish not acknowledged")
+		}
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("rabbitmq publish confirm timeout: %w", ctx.Err())
+	}
 }
 
 func (c *Client) NewChannel() (*amqp.Channel, error) {

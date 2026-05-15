@@ -21,6 +21,8 @@ pnpm-debug.log*
 *.test
 *.out
 *.prof
+.go-build/
+**/.go-build/
 # 依赖包缓存
 vendor/
 

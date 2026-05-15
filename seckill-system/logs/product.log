@@ -1,0 +1,16 @@
+2026/05/12 22:45:26 MySQL connected successfully
+2026/05/12 22:45:26 Auto migrate completed
+2026/05/12 22:45:26 Redis connected successfully
+2026/05/12 22:45:26 Stock preheated successfully
+[GIN-debug] [WARNING] Creating an Engine instance with the Logger and Recovery middleware already attached.
+
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /api/v1/seckill/products  --> seckill-system/services/product/api.(*ProductAPI).GetSeckillProducts-fm (4 handlers)
+2026/05/12 22:45:26 Product HTTP server starting on :8082
+[GIN-debug] [WARNING] You trusted all proxies, this is NOT safe. We recommend you to set a value.
+Please check https://github.com/gin-gonic/gin/blob/master/docs/doc.md#dont-trust-all-proxies for details.
+[GIN-debug] Listening and serving HTTP on :8082
+Product gRPC server starting on :50052

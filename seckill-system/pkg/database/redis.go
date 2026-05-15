@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"seckill-system/pkg/config"
+	"seckill-system/pkg/common/config"
 )
 
 var RDB *redis.Client

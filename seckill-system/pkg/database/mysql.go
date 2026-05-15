@@ -7,7 +7,7 @@ import (
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	"seckill-system/pkg/config"
+	"seckill-system/pkg/common/config"
 )
 
 var DB *gorm.DB

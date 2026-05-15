@@ -212,3 +212,253 @@ docker exec seckill-rabbitmq rabbitmqctl list_queues name messages_ready message
 name	messages_ready	messages_unacknowledged
 seckill.order.queue	0	0
 ```
+
+---
+
+## 2026-05-08 16:50 CST — Monorepo 改造：提取公共组件到 pkg/common/
+
+### 已完成工作
+
+1. **新建目录结构**
+   - `services/`：未来所有微服务将放置于此
+   - `pkg/common/`：存放所有服务共享的通用逻辑
+
+2. **公共组件提取** (`pkg/common/`)
+   - `jwt/jwt.go`：JWT Token 生成与解析（原 `pkg/utils/jwt.go`）
+   - `response/response.go`：统一 JSON 响应封装（原 `pkg/response/response.go`）
+   - `config/config.go`：Viper 配置解析模型（原 `pkg/config/config.go`）
+   - `errors/errors.go`：统一错误码与通用业务错误定义（新建）
+   - `utils/password.go`：bcrypt 密码哈希工具（原 `pkg/utils/password.go`）
+
+3. **修复所有导入路径**（共 8 个文件）
+   - `cmd/seckill/main.go`
+   - `internal/middleware/jwt.go`
+   - `internal/api/user.go`、`internal/api/seckill.go`
+   - `internal/service/user.go`
+   - `pkg/database/mysql.go`、`pkg/database/redis.go`
+   - `pkg/rabbitmq/rabbitmq.go`
+
+4. **调用方适配**
+   - `middleware/jwt.go`：`utils.ParseToken` → `jwt.ParseToken`
+   - `service/user.go`：`utils.GenerateToken` → `jwt.GenerateToken`
+
+5. **清理旧目录**
+   - 删除 `pkg/utils/`、`pkg/response/`、`pkg/config/`
+
+### 验证结果
+
+```bash
+go build ./cmd/seckill/...
+go vet ./...
+```
+编译与静态检查均通过，无报错。
+
+---
+
+## 2026-05-08 17:30 CST — 拆分用户服务（User Service）微服务
+
+### 已完成工作
+
+1. **新增 gRPC/Protobuf 工具链**
+   - 安装 `google.golang.org/grpc`、`google.golang.org/protobuf`
+   - 定义 `services/user/proto/user.proto`，包含 4 个 RPC：
+     - `Register` / `Login` — 用户注册与登录
+     - `ParseToken` — Token 校验（供秒杀服务中间件调用）
+     - `GetUserByID` — 用户信息查询
+   - 生成 `services/user/proto/gen/user.pb.go` 和 `user_grpc.pb.go`
+
+2. **创建独立 User Service** (`services/user/`)
+   - `cmd/user/main.go`：服务入口，同时启动 gRPC Server（:50051）和 Gin HTTP Server（:8081）
+   - `internal/model/user.go` / `internal/repository/user.go` / `internal/service/user.go`：迁移自原单体
+   - `api/user.go`：HTTP handler（`/api/v1/register`、`/api/v1/login`）
+   - `proto/server/grpc_server.go`：gRPC server 实现
+   - 测试数据初始化（admin / 123456）迁移至 User Service 启动流程
+
+3. **扩展共享配置**
+   - `pkg/common/config/config.go`：新增 `UserGRPCConfig`（Host / Port）
+   - `config/config.yaml`：新增 `user_grpc: { host: localhost, port: 50051 }`
+
+4. **改造原单体应用（秒杀服务）**
+   - 删除直接操作用户数据库的代码：`internal/model/user.go`、`internal/repository/user.go`、`internal/service/user.go`、`internal/api/user.go`
+   - `cmd/seckill/main.go`：
+     - 删除 `AutoMigrate(&model.User{})`
+     - 删除用户相关路由（`/api/v1/register`、`/api/v1/login`）
+     - 删除 `initTestData` 中创建 admin 用户的逻辑
+     - 新增 `middleware.InitUserGRPCClient(cfg.UserGRPC)`
+   - `internal/middleware/jwt.go`：
+     - 新增 `InitUserGRPCClient`，建立到 User Service 的 gRPC 连接
+     - `JWTAuth()` 不再本地解析 JWT，改为通过 gRPC 调用 `UserService.ParseToken`
+
+5. **删除旧文件**
+   - `internal/model/user.go`
+   - `internal/repository/user.go`
+   - `internal/service/user.go`
+   - `internal/api/user.go`
+
+### 拆分后的服务架构
+
+```
+┌─────────────────────────┐     gRPC (:50051)      ┌─────────────────────────┐
+│    Seckill Service      │  ═══════════════════►  │      User Service       │
+│    (HTTP :8080)         │                        │    (HTTP :8081)         │
+│                         │  ◄── ParseToken ────   │                         │
+│  /api/v1/seckill/do     │  ◄── GetUserByID ───   │  /api/v1/register       │
+│  /api/v1/seckill/products│                        │  /api/v1/login          │
+└─────────────────────────┘                        └─────────────────────────┘
+```
+
+### 验证结果
+
+```bash
+go mod tidy
+go build ./services/user/cmd/user/...
+go build ./cmd/seckill/...
+go vet ./...
+```
+User Service 与秒杀服务均编译通过，静态检查无报错。
+
+---
+
+## 2026-05-08 18:00 CST — 拆分商品服务（Product Service）微服务
+
+### 已完成工作
+
+1. **定义 product.proto**
+   - `services/product/proto/product.proto`，包含 3 个 RPC：
+     - `GetProducts` — 获取秒杀商品列表（含关联商品信息）
+     - `CheckStock` — 查询 Redis 库存
+     - `DeductStock` — 执行 Redis Lua 脚本原子扣减库存
+   - 生成 `services/product/proto/gen/product.pb.go` 和 `product_grpc.pb.go`
+
+2. **创建独立 Product Service** (`services/product/`)
+   - `cmd/product/main.go`：服务入口，同时启动 gRPC Server（:50052）和 Gin HTTP Server（:8082）
+   - `internal/model/product.go` / `internal/model/seckill_product.go`：迁移自原单体
+   - `internal/repository/seckill_product.go`：秒杀商品数据访问层
+   - `internal/service/product.go`：业务逻辑（GetSeckillProducts、PreheatStock、DoSeckill、CheckStock）
+   - `api/product.go`：HTTP handler（`/api/v1/seckill/products`）
+   - `proto/server/grpc_server.go`：gRPC server 实现
+   - 测试数据初始化（商品 + 秒杀商品）迁移至 Product Service 启动流程
+   - 库存预热 `PreheatStock()` 迁移至 Product Service 启动时执行
+
+3. **扩展共享配置**
+   - `pkg/common/config/config.go`：新增 `ProductGRPCConfig`（Host / Port）
+   - `config/config.yaml`：新增 `product_grpc: { host: localhost, port: 50052 }`
+
+4. **改造原单体应用（秒杀服务）**
+   - 删除直接操作商品数据库的代码：
+     - `internal/model/product.go`
+     - `internal/repository/seckill_product.go`
+   - `internal/service/seckill.go`：
+     - 删除 `seckillRepo` 依赖和 `GetSeckillProducts`、`PreheatStock`、`DoSeckill` 方法
+     - 新增 `InitProductGRPCClient`，建立到 Product Service 的 gRPC 连接
+     - 保留 `SendOrderMessage`（发送 RabbitMQ 订单消息）
+   - `internal/api/seckill.go`：
+     - `GetSeckillProducts` 改为通过 gRPC 调用 `ProductService.GetProducts`
+     - `DoSeckill` 改为通过 gRPC 调用 `ProductService.DeductStock`
+   - `cmd/seckill/main.go`：
+     - 删除 `AutoMigrate(&model.Product{}, &model.SeckillProduct{})`
+     - 删除 `seckillRepo` 初始化、库存预热调用、`initTestData` 中创建商品/秒杀商品逻辑
+     - 新增 `service.InitProductGRPCClient(cfg.ProductGRPC.Host, cfg.ProductGRPC.Port)`
+
+5. **保留消费者不变**
+   - `pkg/rabbitmq/consumer.go` 完全未修改
+   - `internal/model/seckill_product.go` 保留简化版（仅含消费者需要的字段，移除 `Product` 外键关联）
+   - `cmd/seckill/main.go` 仍保留 `AutoMigrate(&model.Order{})` 供消费者使用
+
+### 拆分后的服务架构
+
+```
+┌─────────────────────────┐     gRPC (:50051)      ┌─────────────────────────┐
+│    Seckill Service      │  ═══════════════════►  │      User Service       │
+│    (HTTP :8080)         │                        │    (HTTP :8081)         │
+│                         │  ◄── ParseToken ────   │                         │
+│  /api/v1/seckill/do     │  ◄── GetUserByID ───   │  /api/v1/register       │
+│  /api/v1/seckill/products│                        │  /api/v1/login          │
+└──────────┬──────────────┘                        └─────────────────────────┘
+           │
+           │ gRPC (:50052)
+           ▼
+┌─────────────────────────┐
+│     Product Service     │
+│   (gRPC :50052 + HTTP   │
+│         :8082)          │
+│                         │
+│  GetProducts /          │
+│  CheckStock /           │
+│  DeductStock (Lua)      │
+└─────────────────────────┘
+```
+
+### 验证结果
+
+```bash
+go mod tidy
+go build ./services/product/cmd/product/...
+go build ./cmd/seckill/...
+go vet ./...
+```
+Product Service、User Service 与秒杀服务均编译通过，静态检查无报错。
+
+---
+
+## 2026-05-08 18:20 CST — 拆分订单消费服务（Order Service）后台 Worker
+
+### 已完成工作
+
+1. **创建独立 Order Service** (`services/order/`)
+   - `cmd/order/main.go`：后台 Worker 入口，初始化 MySQL + RabbitMQ 后启动消费者并阻塞运行
+   - `internal/consumer/consumer.go`：完整迁移自 `pkg/rabbitmq/consumer.go`
+     - 保留 QoS 限流：`ch.Qos(100, 0, false)`（Prefetch = 100）
+     - 保留手动 ACK/NACK 机制
+     - 保留事务安全落库：`db.Transaction` 包裹乐观锁扣减 + 插入订单
+   - `internal/model/order.go` / `seckill_product.go`：迁移自原单体，供消费者落库使用
+
+2. **原单体应用改造（秒杀网关）**
+   - `cmd/seckill/main.go`：
+     - 删除 `go rabbitmq.StartOrderConsumer(db)` 调用
+     - 删除 `AutoMigrate(&model.Order{})`
+     - 删除不再需要的 `internal/model` 和 `gorm.io/gorm` import
+   - 仅保留 RabbitMQ **生产者**逻辑（`pkg/rabbitmq/rabbitmq.go` 中的 `PublishOrderMessage`）
+
+3. **删除旧文件**
+   - `pkg/rabbitmq/consumer.go`
+   - `internal/model/order.go`
+   - `internal/model/seckill_product.go`
+
+### 拆分后的服务架构
+
+```
+┌─────────────────────────┐     gRPC (:50051)      ┌─────────────────────────┐
+│    Seckill Service      │  ═══════════════════►  │      User Service       │
+│    (HTTP :8080)         │                        │    (HTTP :8081)         │
+│                         │  ◄── ParseToken ────   │                         │
+│  /api/v1/seckill/do     │  ◄── GetUserByID ───   │  /api/v1/register       │
+│  /api/v1/seckill/products│                        │  /api/v1/login          │
+└──────────┬──────────────┘                        └─────────────────────────┘
+           │
+           │ gRPC (:50052)              RabbitMQ
+           ▼                              │
+┌─────────────────────────┐               │
+│     Product Service     │               │
+│   (gRPC :50052 + HTTP   │               │
+│         :8082)          │               │
+│                         │               ▼
+│  GetProducts /          │      ┌─────────────────────────┐
+│  CheckStock /           │      │     Order Service       │
+│  DeductStock (Lua)      │      │     (后台 Worker)        │
+└─────────────────────────┘      │                         │
+                                 │  StartOrderConsumer     │
+                                 │  QoS=100 / ACK+NACK     │
+                                 │  MySQL 事务落库          │
+                                 └─────────────────────────┘
+```
+
+### 验证结果
+
+```bash
+go mod tidy
+go build ./services/order/cmd/order/...
+go build ./cmd/seckill/...
+go vet ./...
+```
+Order Service、Product Service、User Service 与秒杀服务均编译通过，静态检查无报错。
