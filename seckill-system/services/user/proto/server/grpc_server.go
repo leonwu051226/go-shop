@@ -8,8 +8,9 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
+	"seckill-system/pkg/common/captcha"
 	"seckill-system/pkg/common/jwt"
+	"seckill-system/pkg/database"
 	"seckill-system/services/user/internal/service"
 	pb "seckill-system/services/user/proto/gen"
 )
@@ -40,6 +41,23 @@ func (s *GRPCServer) Run() error {
 	return grpcServer.Serve(lis)
 }
 
+func (s *GRPCServer) GenerateCaptcha(ctx context.Context, req *pb.GenerateCaptchaRequest) (*pb.GenerateCaptchaResponse, error) {
+	challenge, err := captcha.Generate(ctx, database.RDB)
+	if err != nil {
+		return &pb.GenerateCaptchaResponse{
+			Code:    500,
+			Message: err.Error(),
+		}, nil
+	}
+	return &pb.GenerateCaptchaResponse{
+		Code:         0,
+		Message:      "success",
+		CaptchaId:    challenge.ID,
+		CaptchaImage: challenge.Image,
+		ExpiresIn:    int32(challenge.ExpiresIn),
+	}, nil
+}
+
 func (s *GRPCServer) Register(ctx context.Context, req *pb.RegisterRequest) (*pb.RegisterResponse, error) {
 	user, err := s.userService.Register(req.Username, req.Password)
 	if err != nil {
@@ -60,19 +78,19 @@ func (s *GRPCServer) Register(ctx context.Context, req *pb.RegisterRequest) (*pb
 			Id:        uint64(user.ID),
 			Username:  user.Username,
 			CreatedAt: user.CreatedAt.Format(time.RFC3339),
+			Role:      int32(user.Role),
 		},
 	}, nil
 }
 
 func (s *GRPCServer) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResponse, error) {
-	md, _ := metadata.FromIncomingContext(ctx)
 	token, err := s.userService.Login(
 		ctx,
 		req.Username,
 		req.Password,
-		firstMetadata(md, "captcha-id"),
-		firstMetadata(md, "captcha-code"),
-		firstMetadata(md, "client-ip"),
+		req.CaptchaId,
+		req.CaptchaCode,
+		req.ClientIp,
 	)
 	if err != nil {
 		return &pb.LoginResponse{
@@ -86,14 +104,6 @@ func (s *GRPCServer) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Login
 		Message: "success",
 		Token:   token,
 	}, nil
-}
-
-func firstMetadata(md metadata.MD, key string) string {
-	values := md.Get(key)
-	if len(values) == 0 {
-		return ""
-	}
-	return values[0]
 }
 
 func (s *GRPCServer) ParseToken(ctx context.Context, req *pb.ParseTokenRequest) (*pb.ParseTokenResponse, error) {
@@ -110,6 +120,7 @@ func (s *GRPCServer) ParseToken(ctx context.Context, req *pb.ParseTokenRequest) 
 		Message:  "success",
 		UserId:   uint64(claims.UserID),
 		Username: claims.Username,
+		Role:     int32(claims.Role),
 	}, nil
 }
 
@@ -129,6 +140,7 @@ func (s *GRPCServer) GetUserByID(ctx context.Context, req *pb.GetUserByIDRequest
 			Id:        uint64(user.ID),
 			Username:  user.Username,
 			CreatedAt: user.CreatedAt.Format(time.RFC3339),
+			Role:      int32(user.Role),
 		},
 	}, nil
 }

@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: order
-          image: seckill-order:latest
+          image: seckill-order:v2
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 50053

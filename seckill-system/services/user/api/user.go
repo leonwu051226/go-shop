@@ -44,6 +44,7 @@ func (a *UserAPI) Register(c *gin.Context) {
 	response.Success(c, gin.H{
 		"id":       user.ID,
 		"username": user.Username,
+		"role":     user.Role,
 	})
 }
 

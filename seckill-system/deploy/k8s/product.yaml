@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: product
-          image: seckill-product:latest
+          image: seckill-product:v2
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8082

@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 	"seckill-system/pkg/common/config"
 	"seckill-system/pkg/database"
 	"seckill-system/services/product/api"
@@ -13,7 +14,6 @@ import (
 	"seckill-system/services/product/internal/repository"
 	"seckill-system/services/product/internal/service"
 	"seckill-system/services/product/proto/server"
-	"gorm.io/gorm"
 )
 
 func main() {
@@ -53,6 +53,13 @@ func main() {
 	seckillRepo := repository.NewSeckillProductRepository(db)
 	productRepo := repository.NewProductRepository(db)
 	productService := service.NewProductService(seckillRepo, productRepo)
+	searchRepo, err := repository.NewProductSearchRepository(cfg.Elasticsearch)
+	if err != nil {
+		log.Printf("Failed to init elasticsearch, product search will fallback to mysql: %v", err)
+	} else {
+		productService.SetSearchRepository(searchRepo)
+		log.Println("Elasticsearch connected successfully")
+	}
 	productAPI := api.NewProductAPI(productService)
 
 	// 8. 库存预热

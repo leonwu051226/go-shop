@@ -51,18 +51,37 @@ func main() {
 
 	r.GET("/ping", api.Ping)
 	r.GET("/api/v1/captcha", api.Captcha)
-	r.POST("/api/v1/register", api.Register)
-	r.POST("/api/v1/login", api.Login)
 	r.GET("/api/v1/products", api.GetProductList)
 	r.GET("/api/v1/products/:id", api.GetProductDetail)
 	r.GET("/api/v1/seckill/products", seckillAPI.GetSeckillProducts)
 
-	authorized := r.Group("/api/v1")
-	authorized.Use(middleware.JWTAuth())
+	userGroup := r.Group("/api/v1/user")
 	{
-		authorized.POST("/seckill/do", seckillAPI.DoSeckill)
-		authorized.GET("/orders", api.GetOrders)
-		authorized.GET("/user/profile", api.GetUserProfile)
+		userGroup.POST("/register", api.Register)
+		userGroup.POST("/login", api.Login)
+		userAuth := userGroup.Group("")
+		userAuth.Use(middleware.JWTAuth())
+		{
+			userAuth.GET("/profile", api.GetUserProfile)
+			userAuth.POST("/orders", api.CreateOrder)
+			userAuth.POST("/seckill/do", seckillAPI.DoSeckill)
+			userAuth.GET("/orders", api.GetOrders)
+			userAuth.GET("/orders/:id", api.GetOrderDetail)
+			userAuth.POST("/orders/:id/pay", api.PayOrder)
+		}
+	}
+
+	merchantGroup := r.Group("/api/v1/merchant")
+	{
+		merchantGroup.POST("/login", api.MerchantLogin)
+		merchantAuth := merchantGroup.Group("")
+		merchantAuth.Use(middleware.MerchantAuth())
+		{
+			merchantAuth.POST("/products/add", api.AddProduct)
+			merchantAuth.GET("/orders", api.GetAllOrders)
+			merchantAuth.POST("/orders/:id/ship", api.ShipOrder)
+			merchantAuth.GET("/products/sales", api.GetProductSalesStats)
+		}
 	}
 
 	port := cfg.Server.Port

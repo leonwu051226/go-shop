@@ -35,3 +35,8 @@ rabbitmq:
   user: admin
   password: admin123456
   vhost: /
+
+elasticsearch:
+  addresses:
+    - http://localhost:9200
+  index: products

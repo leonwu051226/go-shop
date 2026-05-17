@@ -4,12 +4,14 @@ package order;
 
 option go_package = "seckill-system/services/order/proto/gen";
 
-// 订单服务
 service OrderService {
-  // 根据用户ID查询订单列表
+  rpc CreateOrder (CreateOrderRequest) returns (CreateOrderResponse);
+  rpc PayOrder (PayOrderRequest) returns (PayOrderResponse);
   rpc GetOrderListByUserID (GetOrderListByUserIDRequest) returns (GetOrderListByUserIDResponse);
-  // 查询订单详情
   rpc GetOrderDetail (GetOrderDetailRequest) returns (GetOrderDetailResponse);
+  rpc GetAllOrders (GetAllOrdersRequest) returns (GetAllOrdersResponse);
+  rpc ShipOrder (ShipOrderRequest) returns (ShipOrderResponse);
+  rpc GetProductSalesStats (GetProductSalesStatsRequest) returns (GetProductSalesStatsResponse);
 }
 
 message OrderInfo {
@@ -22,9 +24,35 @@ message OrderInfo {
   double total_price = 7;
   int32 status = 8;
   string created_at = 9;
+  int32 logistics_status = 10;
+  string tracking_no = 11;
+  string paid_at = 12;
+  string shipped_at = 13;
 }
 
-// ========== GetOrderListByUserID ==========
+message CreateOrderRequest {
+  uint64 user_id = 1;
+  uint64 product_id = 2;
+  int32 quantity = 3;
+}
+
+message CreateOrderResponse {
+  int32 code = 1;
+  string message = 2;
+  OrderInfo data = 3;
+}
+
+message PayOrderRequest {
+  uint64 user_id = 1;
+  uint64 order_id = 2;
+}
+
+message PayOrderResponse {
+  int32 code = 1;
+  string message = 2;
+  OrderInfo data = 3;
+}
+
 message GetOrderListByUserIDRequest {
   uint64 user_id = 1;
 }
@@ -35,7 +63,6 @@ message GetOrderListByUserIDResponse {
   repeated OrderInfo data = 3;
 }
 
-// ========== GetOrderDetail ==========
 message GetOrderDetailRequest {
   uint64 order_id = 1;
 }
@@ -44,4 +71,42 @@ message GetOrderDetailResponse {
   int32 code = 1;
   string message = 2;
   OrderInfo data = 3;
+}
+
+message GetAllOrdersRequest {
+  int32 limit = 1;
+  int32 offset = 2;
+}
+
+message GetAllOrdersResponse {
+  int32 code = 1;
+  string message = 2;
+  repeated OrderInfo data = 3;
+  int32 total = 4;
+}
+
+message ShipOrderRequest {
+  uint64 order_id = 1;
+  string tracking_no = 2;
+}
+
+message ShipOrderResponse {
+  int32 code = 1;
+  string message = 2;
+  OrderInfo data = 3;
+}
+
+message ProductSalesStat {
+  uint64 product_id = 1;
+  string product_name = 2;
+  int32 paid_quantity = 3;
+  double paid_amount = 4;
+}
+
+message GetProductSalesStatsRequest {}
+
+message GetProductSalesStatsResponse {
+  int32 code = 1;
+  string message = 2;
+  repeated ProductSalesStat data = 3;
 }

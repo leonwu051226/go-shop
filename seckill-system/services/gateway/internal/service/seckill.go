@@ -7,7 +7,6 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
 	"seckill-system/pkg/database"
 	"seckill-system/pkg/rabbitmq"
 	pb "seckill-system/services/product/proto/gen"
@@ -29,6 +28,13 @@ func InitProductGRPCClient(host string, port int) error {
 
 type SeckillService struct{}
 
+type SeckillResult struct {
+	Result        int
+	ReservationID string
+	ProductID     uint
+	SeckillPrice  float64
+}
+
 func NewSeckillService() *SeckillService {
 	return &SeckillService{}
 }
@@ -47,25 +53,27 @@ func (s *SeckillService) GetSeckillProducts() ([]*pb.SeckillProductInfo, error) 
 	return resp.Data, nil
 }
 
-func (s *SeckillService) DoSeckill(userID, seckillProductID uint, requestID string) (int, error) {
+func (s *SeckillService) DoSeckill(userID, seckillProductID uint, requestID string) (*SeckillResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	ctx = metadata.AppendToOutgoingContext(
-		ctx,
-		"user-id", fmt.Sprintf("%d", userID),
-		"request-id", requestID,
-	)
 
 	resp, err := ProductClient.DeductStock(ctx, &pb.DeductStockRequest{
 		SeckillProductId: uint64(seckillProductID),
+		UserId:           uint64(userID),
+		RequestId:        requestID,
 	})
 	if err != nil {
-		return -2, err
+		return nil, err
 	}
 	if resp.Code != 0 {
-		return int(resp.Result), fmt.Errorf("%s", resp.Message)
+		return &SeckillResult{Result: int(resp.Result)}, fmt.Errorf("%s", resp.Message)
 	}
-	return int(resp.Result), nil
+	return &SeckillResult{
+		Result:        int(resp.Result),
+		ReservationID: resp.ReservationId,
+		ProductID:     uint(resp.ProductId),
+		SeckillPrice:  resp.SeckillPrice,
+	}, nil
 }
 
 func (s *SeckillService) SendOrderMessage(userID, seckillProductID uint, orderID string, totalPrice float64) error {

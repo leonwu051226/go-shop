@@ -15,8 +15,11 @@ import (
 func GetProductList(c *gin.Context) {
 	limitStr := c.DefaultQuery("limit", "10")
 	offsetStr := c.DefaultQuery("offset", "0")
+	keyword := c.Query("keyword")
 	limit, _ := strconv.Atoi(limitStr)
 	offset, _ := strconv.Atoi(offsetStr)
+	minPrice, _ := strconv.ParseFloat(c.DefaultQuery("min_price", "0"), 64)
+	maxPrice, _ := strconv.ParseFloat(c.DefaultQuery("max_price", "0"), 64)
 	if limit <= 0 {
 		limit = 10
 	}
@@ -28,8 +31,11 @@ func GetProductList(c *gin.Context) {
 	defer cancel()
 
 	resp, err := service.ProductClient.GetProductList(ctx, &pb.GetProductListRequest{
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Limit:    int32(limit),
+		Offset:   int32(offset),
+		Keyword:  keyword,
+		MinPrice: minPrice,
+		MaxPrice: maxPrice,
 	})
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())

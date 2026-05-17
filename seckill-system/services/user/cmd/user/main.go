@@ -66,20 +66,38 @@ func main() {
 }
 
 func initTestData(db *gorm.DB) error {
-	var count int64
-	if err := db.Model(&model.User{}).Count(&count).Error; err != nil {
+	if err := ensureTestUser(db, "admin", "Admin123456", 0); err != nil {
 		return err
 	}
-	if count > 0 {
-		return nil
-	}
-
-	hash, _ := utils.HashPassword("Admin123456")
-	admin := &model.User{Username: "admin", PasswordHash: hash}
-	if err := db.Create(admin).Error; err != nil {
+	if err := ensureTestUser(db, "merchant01", "Merchant123456", 1); err != nil {
 		return err
 	}
 
-	log.Println("Test user initialized: admin / Admin123456")
+	log.Println("Test users ready: admin / Admin123456, merchant01 / Merchant123456")
 	return nil
+}
+
+func ensureTestUser(db *gorm.DB, username, password string, role int8) error {
+	hash, err := utils.HashPassword(password)
+	if err != nil {
+		return err
+	}
+
+	var user model.User
+	err = db.Where("username = ?", username).First(&user).Error
+	if err == nil {
+		return db.Model(&user).Updates(map[string]any{
+			"password_hash": hash,
+			"role":          role,
+		}).Error
+	}
+	if err != gorm.ErrRecordNotFound {
+		return err
+	}
+
+	return db.Create(&model.User{
+		Username:     username,
+		PasswordHash: hash,
+		Role:         role,
+	}).Error
 }

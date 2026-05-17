@@ -7,13 +7,14 @@ import (
 )
 
 type Config struct {
-	Server      ServerConfig
-	UserGRPC    UserGRPCConfig
-	ProductGRPC ProductGRPCConfig
-	OrderGRPC   OrderGRPCConfig
-	MySQL       MySQLConfig
-	Redis       RedisConfig
-	RabbitMQ    RabbitMQConfig
+	Server        ServerConfig
+	UserGRPC      UserGRPCConfig
+	ProductGRPC   ProductGRPCConfig
+	OrderGRPC     OrderGRPCConfig
+	MySQL         MySQLConfig
+	Redis         RedisConfig
+	RabbitMQ      RabbitMQConfig
+	Elasticsearch ElasticsearchConfig
 }
 
 type ProductGRPCConfig struct {
@@ -59,6 +60,11 @@ type RabbitMQConfig struct {
 	User     string
 	Password string
 	VHost    string
+}
+
+type ElasticsearchConfig struct {
+	Addresses []string
+	Index     string
 }
 
 var C *Config

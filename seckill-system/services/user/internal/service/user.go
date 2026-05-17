@@ -51,6 +51,7 @@ func (s *UserService) Register(username, password string) (*model.User, error) {
 	user := &model.User{
 		Username:     username,
 		PasswordHash: hash,
+		Role:         0,
 	}
 	if err := s.userRepo.Create(user); err != nil {
 		if isDuplicateErr(err) {
@@ -87,7 +88,7 @@ func (s *UserService) Login(ctx context.Context, username, password, captchaID, 
 		return "", errors.New("invalid username or password")
 	}
 
-	token, err := jwt.GenerateToken(user.ID, user.Username)
+	token, err := jwt.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
 		return "", err
 	}

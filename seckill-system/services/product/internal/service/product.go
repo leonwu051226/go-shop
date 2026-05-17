@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -39,6 +40,14 @@ var luaDeductionScript = redis.NewScript(`
 type ProductService struct {
 	seckillRepo *repository.SeckillProductRepository
 	productRepo *repository.ProductRepository
+	searchRepo  *repository.ProductSearchRepository
+}
+
+type SeckillReservation struct {
+	Result        int
+	ReservationID string
+	ProductID     uint
+	SeckillPrice  float64
 }
 
 func NewProductService(seckillRepo *repository.SeckillProductRepository, productRepo *repository.ProductRepository) *ProductService {
@@ -46,6 +55,10 @@ func NewProductService(seckillRepo *repository.SeckillProductRepository, product
 		seckillRepo: seckillRepo,
 		productRepo: productRepo,
 	}
+}
+
+func (s *ProductService) SetSearchRepository(searchRepo *repository.ProductSearchRepository) {
+	s.searchRepo = searchRepo
 }
 
 func (s *ProductService) GetSeckillProducts() ([]model.SeckillProduct, error) {
@@ -70,18 +83,21 @@ func (s *ProductService) PreheatStock() error {
 }
 
 // DoSeckill atomically checks duplicate purchase and reserves Redis stock.
-// Returns: 1=success, 0=out of stock, -1=already purchased, -2=error
-func (s *ProductService) DoSeckill(userID, seckillProductID uint) (int, error) {
+// Result: 1=success, 0=out of stock, -1=already purchased, -2=error
+func (s *ProductService) DoSeckill(userID, seckillProductID uint, requestID string) (*SeckillReservation, error) {
 	if userID == 0 {
-		return -2, fmt.Errorf("user id is required")
+		return &SeckillReservation{Result: -2}, fmt.Errorf("user id is required")
+	}
+	if requestID == "" {
+		return &SeckillReservation{Result: -2}, fmt.Errorf("request id is required")
 	}
 	product, err := s.seckillRepo.GetByID(seckillProductID)
 	if err != nil {
-		return -2, err
+		return &SeckillReservation{Result: -2}, err
 	}
 	now := time.Now()
 	if product.Status != 1 || now.Before(product.StartTime) || now.After(product.EndTime) {
-		return -2, fmt.Errorf("seckill product is not active")
+		return &SeckillReservation{Result: -2}, fmt.Errorf("seckill product is not active")
 	}
 
 	stockKey := fmt.Sprintf(StockKeyPrefix, seckillProductID)
@@ -95,9 +111,14 @@ func (s *ProductService) DoSeckill(userID, seckillProductID uint) (int, error) {
 	).Int()
 
 	if err != nil {
-		return -2, err
+		return &SeckillReservation{Result: -2}, err
 	}
-	return result, nil
+	return &SeckillReservation{
+		Result:        result,
+		ReservationID: requestID,
+		ProductID:     product.ProductID,
+		SeckillPrice:  product.SeckillPrice,
+	}, nil
 }
 
 func (s *ProductService) CheckStock(seckillProductID uint) (int, error) {
@@ -117,7 +138,14 @@ func (s *ProductService) GetByID(id uint) (*model.SeckillProduct, error) {
 	return s.seckillRepo.GetByID(id)
 }
 
-func (s *ProductService) GetProductList(limit, offset int) ([]model.Product, int64, error) {
+func (s *ProductService) GetProductList(keyword string, minPrice, maxPrice float64, limit, offset int) ([]model.Product, int64, error) {
+	if s.searchRepo != nil && (strings.TrimSpace(keyword) != "" || minPrice > 0 || maxPrice > 0) {
+		result, err := s.searchRepo.SearchProducts(context.Background(), keyword, minPrice, maxPrice, limit, offset)
+		if err == nil {
+			return result.Products, result.Total, nil
+		}
+	}
+
 	products, err := s.productRepo.List(limit, offset)
 	if err != nil {
 		return nil, 0, err
@@ -131,4 +159,59 @@ func (s *ProductService) GetProductList(limit, offset int) ([]model.Product, int
 
 func (s *ProductService) GetProductDetail(id uint) (*model.Product, error) {
 	return s.productRepo.GetByID(id)
+}
+
+func (s *ProductService) CreateProduct(name, description string, price float64, stock int) (*model.Product, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, fmt.Errorf("product name is required")
+	}
+	if price <= 0 {
+		return nil, fmt.Errorf("product price must be greater than 0")
+	}
+	if stock < 0 {
+		return nil, fmt.Errorf("stock cannot be negative")
+	}
+
+	product := &model.Product{
+		Name:        name,
+		Description: strings.TrimSpace(description),
+		Price:       price,
+		Stock:       stock,
+	}
+	if err := s.productRepo.CreateProduct(product); err != nil {
+		return nil, err
+	}
+	if s.searchRepo != nil {
+		if err := s.searchRepo.IndexProduct(context.Background(), product); err != nil {
+			return nil, err
+		}
+	}
+	return product, nil
+}
+
+func (s *ProductService) ReleaseSeckillStock(userID, seckillProductID uint, quantity int) error {
+	if userID == 0 {
+		return fmt.Errorf("user id is required")
+	}
+	if seckillProductID == 0 {
+		return fmt.Errorf("seckill product id is required")
+	}
+	if quantity <= 0 {
+		quantity = 1
+	}
+
+	ctx := context.Background()
+	stockKey := fmt.Sprintf(StockKeyPrefix, seckillProductID)
+	userKey := fmt.Sprintf(UserKeyPrefix, seckillProductID)
+	removed, err := database.RDB.SRem(ctx, userKey, userID).Result()
+	if err != nil {
+		return err
+	}
+	if removed > 0 {
+		if err := database.RDB.IncrBy(ctx, stockKey, int64(quantity)).Err(); err != nil {
+			return err
+		}
+	}
+	return nil
 }

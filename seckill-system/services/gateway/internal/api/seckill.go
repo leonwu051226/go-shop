@@ -45,26 +45,26 @@ func (a *SeckillAPI) DoSeckill(c *gin.Context) {
 	uid := userID.(uint)
 
 	orderID := uuid.New().String()
-	result, err := a.seckillService.DoSeckill(uid, req.SeckillProductID, orderID)
+	seckillResult, err := a.seckillService.DoSeckill(uid, req.SeckillProductID, orderID)
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, "system error, please try again")
 		return
 	}
 
-	switch result {
+	switch seckillResult.Result {
 	case -1:
 		response.Fail(c, http.StatusForbidden, "you have already purchased this item")
 	case 0:
 		response.Fail(c, http.StatusGone, "sold out")
 	case 1:
-		if err := a.seckillService.SendOrderMessage(uid, req.SeckillProductID, orderID, 0); err != nil {
+		if err := a.seckillService.SendOrderMessage(uid, req.SeckillProductID, seckillResult.ReservationID, seckillResult.SeckillPrice); err != nil {
 			a.seckillService.ReleaseReservation(uid, req.SeckillProductID)
 			response.Fail(c, http.StatusInternalServerError, "failed to queue order")
 			return
 		}
 
 		response.Success(c, gin.H{
-			"order_id": orderID,
+			"order_id": seckillResult.ReservationID,
 			"status":   "queuing",
 			"message":  "your order is being processed",
 		})

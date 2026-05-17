@@ -43,3 +43,25 @@ vendor/
 # 目录同步文件
 .DS_Store
 Thumbs.db
+
+# Local assistant / machine-specific settings
+.claude/
+**/.claude/
+.codex/
+**/.codex/
+
+# Runtime logs
+logs/
+**/logs/
+*.log
+
+# Local Go tooling caches
+.go-telemetry/
+**/.go-telemetry/
+.proto-gen-test/
+**/.proto-gen-test/
+
+# Local frontend dev artifacts
+seckill-frontend/node_modules/
+seckill-frontend/dist/
+seckill-frontend/*.log

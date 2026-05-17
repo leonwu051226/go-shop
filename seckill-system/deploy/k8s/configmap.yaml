@@ -43,3 +43,8 @@ data:
       user: admin
       password: admin123456
       vhost: /
+
+    elasticsearch:
+      addresses:
+        - http://elasticsearch-service:9200
+      index: products

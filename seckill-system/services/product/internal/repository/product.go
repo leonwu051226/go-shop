@@ -14,6 +14,10 @@ func NewProductRepository(db *gorm.DB) *ProductRepository {
 	return &ProductRepository{db: db}
 }
 
+func (r *ProductRepository) CreateProduct(product *model.Product) error {
+	return r.db.Create(product).Error
+}
+
 func (r *ProductRepository) List(limit, offset int) ([]model.Product, error) {
 	var products []model.Product
 	err := r.db.Limit(limit).Offset(offset).Find(&products).Error

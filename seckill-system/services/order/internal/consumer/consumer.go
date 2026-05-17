@@ -49,7 +49,8 @@ func StartOrderConsumer(db *gorm.DB) {
 				continue
 			}
 
-			if err := processOrder(db, &orderMsg); err != nil {
+			order, err := processOrder(db, &orderMsg)
+			if err != nil {
 				if strings.Contains(err.Error(), "insufficient stock") {
 					log.Printf("[Consumer] Insufficient stock, discarding. orderNo=%s, seckillProductID=%d", orderMsg.OrderID, orderMsg.SeckillProductID)
 					msg.Nack(false, false)
@@ -59,6 +60,13 @@ func StartOrderConsumer(db *gorm.DB) {
 				log.Printf("[Consumer] Process order failed, will retry. orderNo=%s, err=%v", orderMsg.OrderID, err)
 				msg.Nack(false, true)
 				continue
+			}
+			if order != nil {
+				if err := rabbitmq.MQ.PublishOrderDelayMessage(&rabbitmq.OrderDelayMessage{OrderID: order.ID}); err != nil {
+					log.Printf("[Consumer] Publish delay message failed, will retry. orderNo=%s, err=%v", orderMsg.OrderID, err)
+					msg.Nack(false, true)
+					continue
+				}
 			}
 
 			if err := msg.Ack(false); err != nil {
@@ -70,13 +78,15 @@ func StartOrderConsumer(db *gorm.DB) {
 	}()
 }
 
-func processOrder(db *gorm.DB, msg *rabbitmq.OrderMessage) error {
+func processOrder(db *gorm.DB, msg *rabbitmq.OrderMessage) (*model.Order, error) {
+	var order *model.Order
 	err := db.Transaction(func(tx *gorm.DB) error {
 		var existing model.Order
 		err := tx.Where("order_no = ? OR (user_id = ? AND seckill_product_id = ?)",
 			msg.OrderID, msg.UserID, msg.SeckillProductID).
 			First(&existing).Error
 		if err == nil {
+			order = &existing
 			return errDuplicateOrder
 		}
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -103,14 +113,14 @@ func processOrder(db *gorm.DB, msg *rabbitmq.OrderMessage) error {
 			totalPrice = seckillProduct.SeckillPrice * float64(msg.Quantity)
 		}
 
-		order := &model.Order{
+		order = &model.Order{
 			OrderNo:          msg.OrderID,
 			UserID:           msg.UserID,
 			ProductID:        seckillProduct.ProductID,
-			SeckillProductID: msg.SeckillProductID,
+			SeckillProductID: &msg.SeckillProductID,
 			Quantity:         msg.Quantity,
 			TotalPrice:       totalPrice,
-			Status:           1,
+			Status:           0,
 			CreatedAt:        time.Now(),
 			UpdatedAt:        time.Now(),
 		}
@@ -126,9 +136,9 @@ func processOrder(db *gorm.DB, msg *rabbitmq.OrderMessage) error {
 	if errors.Is(err, errDuplicateOrder) {
 		log.Printf("[Consumer] Duplicate order ignored. orderNo=%s, userID=%d, seckillProductID=%d",
 			msg.OrderID, msg.UserID, msg.SeckillProductID)
-		return nil
+		return order, nil
 	}
-	return err
+	return order, err
 }
 
 func isDuplicateErr(err error) bool {

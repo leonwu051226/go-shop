@@ -4,11 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"strconv"
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 	"seckill-system/services/product/internal/service"
 	pb "seckill-system/services/product/proto/gen"
 )
@@ -88,45 +86,23 @@ func (s *GRPCServer) CheckStock(ctx context.Context, req *pb.CheckStockRequest) 
 }
 
 func (s *GRPCServer) DeductStock(ctx context.Context, req *pb.DeductStockRequest) (*pb.DeductStockResponse, error) {
-	userID, err := metadataUint(ctx, "user-id")
-	if err != nil {
-		return &pb.DeductStockResponse{
-			Code:    400,
-			Message: err.Error(),
-			Result:  -2,
-		}, nil
-	}
-
-	result, err := s.productService.DoSeckill(uint(userID), uint(req.SeckillProductId))
+	reservation, err := s.productService.DoSeckill(uint(req.UserId), uint(req.SeckillProductId), req.RequestId)
 	if err != nil {
 		return &pb.DeductStockResponse{
 			Code:    500,
 			Message: err.Error(),
-			Result:  -2,
+			Result:  int32(reservation.Result),
 		}, nil
 	}
 
 	return &pb.DeductStockResponse{
-		Code:    0,
-		Message: "success",
-		Result:  int32(result),
+		Code:          0,
+		Message:       "success",
+		Result:        int32(reservation.Result),
+		ReservationId: reservation.ReservationID,
+		ProductId:     uint64(reservation.ProductID),
+		SeckillPrice:  reservation.SeckillPrice,
 	}, nil
-}
-
-func metadataUint(ctx context.Context, key string) (uint64, error) {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return 0, fmt.Errorf("%s metadata is required", key)
-	}
-	values := md.Get(key)
-	if len(values) == 0 || values[0] == "" {
-		return 0, fmt.Errorf("%s metadata is required", key)
-	}
-	value, err := strconv.ParseUint(values[0], 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("invalid %s metadata", key)
-	}
-	return value, nil
 }
 
 func (s *GRPCServer) GetProductList(ctx context.Context, req *pb.GetProductListRequest) (*pb.GetProductListResponse, error) {
@@ -136,7 +112,7 @@ func (s *GRPCServer) GetProductList(ctx context.Context, req *pb.GetProductListR
 	}
 	offset := int(req.Offset)
 
-	products, total, err := s.productService.GetProductList(limit, offset)
+	products, total, err := s.productService.GetProductList(req.Keyword, req.MinPrice, req.MaxPrice, limit, offset)
 	if err != nil {
 		return &pb.GetProductListResponse{
 			Code:    500,
@@ -184,5 +160,39 @@ func (s *GRPCServer) GetProductDetail(ctx context.Context, req *pb.GetProductDet
 			Stock:       int32(product.Stock),
 			CreatedAt:   product.CreatedAt.Format(time.RFC3339),
 		},
+	}, nil
+}
+
+func (s *GRPCServer) CreateProduct(ctx context.Context, req *pb.CreateProductRequest) (*pb.CreateProductResponse, error) {
+	product, err := s.productService.CreateProduct(
+		req.ProductName,
+		req.ProductDescription,
+		req.ProductPrice,
+		int(req.Stock),
+	)
+	if err != nil {
+		return &pb.CreateProductResponse{
+			Code: 500,
+			Msg:  err.Error(),
+		}, nil
+	}
+
+	return &pb.CreateProductResponse{
+		Code:      0,
+		Msg:       "success",
+		ProductId: int64(product.ID),
+	}, nil
+}
+
+func (s *GRPCServer) ReleaseSeckillStock(ctx context.Context, req *pb.ReleaseSeckillStockRequest) (*pb.ReleaseSeckillStockResponse, error) {
+	if err := s.productService.ReleaseSeckillStock(uint(req.UserId), uint(req.SeckillProductId), int(req.Quantity)); err != nil {
+		return &pb.ReleaseSeckillStockResponse{
+			Code:    500,
+			Message: err.Error(),
+		}, nil
+	}
+	return &pb.ReleaseSeckillStockResponse{
+		Code:    0,
+		Message: "success",
 	}, nil
 }

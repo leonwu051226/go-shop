@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: user
-          image: seckill-user:latest
+          image: seckill-user:v2
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8081
