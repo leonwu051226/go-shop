@@ -1,43 +1,85 @@
-
+# Dependencies
 node_modules/
-# 打包构建后的产物
+vendor/
+
+# Frontend build output
 dist/
 dist-ssr/
 build/
-# 本地日志文件
+coverage/
+
+# Logs
+logs/
+**/logs/
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+vite-dev*.log
 
+# Environment variables and local config
+.env
+.env.*
+!.env.example
+!.env.*.example
+config.local.*
+*.local.yaml
+*.local.yml
+*.local.json
 
-# 编译后的二进制执行文件（绝不能传，体积大且毫无意义）
+# Secrets, certificates, and credentials
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+credentials.json
+token.json
+
+# Local assistant / machine-specific settings
+.claude/
+**/.claude/
+.codex/
+**/.codex/
+
+# IDE and editor settings
+.idea/
+*.iml
+.vscode/
+*.code-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Go build and test artifacts
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
-# 测试生成的覆盖率文件
 *.test
 *.out
 *.prof
-# 依赖包缓存
-vendor/
+.go-build/
+**/.go-build/
+.go-telemetry/
+**/.go-telemetry/
+.proto-gen-test/
+**/.proto-gen-test/
 
+# Project runtime artifacts
+seckill-system/bin/
+seckill-system/*.exe
+seckill-system/logs/
 
-.env
-.env.local
-.env.*.local
-*.pem
-*.key
-
-
-# JetBrains 家族 (GoLand, WebStorm 等)
-.idea/
-*.iml
-# VS Code
-.vscode/
-*.code-workspace
-# 目录同步文件
-.DS_Store
-Thumbs.db
+# Local frontend dev artifacts
+seckill-frontend/node_modules/
+seckill-frontend/dist/
+seckill-frontend/*.log
